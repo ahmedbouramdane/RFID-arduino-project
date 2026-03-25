@@ -1,50 +1,76 @@
-<!DOCTYPE html>
+<!doctype html>
 <html data-theme="dark">
-<head>
-    <title>LYDEX Access Control</title>
-    <script src="{{ url_for('static', filename='/tailwindcss3.4.17.js') }}"></script>
-    <link href="{{ url_for('static', filename='/daisyui.min.css') }}" rel="stylesheet" />
-    <script src="{{ url_for('static', filename='/sweetalert2@11.js') }}"></script>
-    <script src="{{ url_for('static', filename='/socket.io.js') }}"></script>
-    <style>
-        /* Hide scrollbar but keep functionality */
-        .scrollbar-hide {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-        .scrollbar-hide::-webkit-scrollbar {
-            display: none;
-        }
-    </style>
-</head>
-<body class="min-h-screen flex flex-col bg-slate-950 text-slate-200">
-    <header class="navbar bg-slate-900/90 backdrop-blur-md border-b border-slate-800 fixed top-0 z-50 px-10 h-20">
-        <div class="flex-1 gap-4">
-            <img src="{{ url_for('static', filename='logo.png') }}" class="h-12">
-            <span class="text-2xl font-black text-white tracking-tighter">LYDEX <span class="text-primary text-sm uppercase ml-1">Secure App - Ahmed BOURAMDANE</span></span>
-        </div>
-        <div class="flex-none">
-            <ul class="menu menu-horizontal font-bold gap-2">
-                <li><a href="/">Dashboard</a></li>
-                <li><a href="/scan">Live Scan</a></li>
-                <li><a href="/add_employee" class="btn btn-primary btn-sm ml-2">Add User</a></li>
-            </ul>
-        </div>
-    </header>
+    <head>
+        <title>LYDEX Access Control</title>
+        <script src="{{ url_for('static', filename='/tailwindcss3.4.17.js') }}"></script>
+        <link
+            href="{{ url_for('static', filename='/daisyui.min.css') }}"
+            rel="stylesheet"
+        />
+        <script src="{{ url_for('static', filename='/sweetalert2@11.js') }}"></script>
+        <script src="{{ url_for('static', filename='/socket.io.js') }}"></script>
+        <style>
+            /* Hide scrollbar but keep functionality */
+            .scrollbar-hide {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+            }
+            .scrollbar-hide::-webkit-scrollbar {
+                display: none;
+            }
+        </style>
+    </head>
+    <body class="min-h-screen flex flex-col  text-slate-200">
+        <header
+            class="navbar bg-slate-900/90 backdrop-blur-md border-b border-slate-400 fixed top-0 z-50 px-10 h-20"
+        >
+            <div class="flex-1 gap-4">
+                <img
+                    src="{{ url_for('static', filename='logo.png') }}"
+                    class="h-12"
+                />
+                <span class="text-2xl font-black text-white tracking-tighter"
+                    >LYDEX
+                    <span class="text-primary text-sm uppercase ml-1"
+                        >Security System - Ahmed BOURAMDANE</span
+                    ></span
+                >
+            </div>
+            <div class="flex-none">
+                <ul class="menu menu-horizontal font-bold gap-2">
+                    <li><a href="/">Dashboard</a></li>
+                    <li><a href="/scan">Live Scan</a></li>
+                    <li>
+                        <a
+                            href="/add_employee"
+                            class="btn btn-primary btn-sm ml-2"
+                            >Add User</a
+                        >
+                    </li>
+                </ul>
+            </div>
+        </header>
 
-    <!-- Main content: scrollable area with padding to account for fixed header/footer -->
-    <main class="flex-grow pt-28 pb-20 overflow-y-auto scrollbar-hide mb-5">
-        <div class="container mx-auto px-6">
-            {% block content %}{% endblock %}
-        </div>
-    </main>
+        <!-- Main content: scrollable area with padding to account for fixed header/footer -->
+        <main class="flex-grow pt-28 pb-20 overflow-y-auto scrollbar-hide mb-5">
+            <div class="container mx-auto px-6">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
 
-    <footer class="mt-4 bg-slate-900 border-t border-slate-800 py-6 fixed bottom-0 w-full z-40 h-20">
-        <div class="container mx-auto px-10 grid grid-cols-3 gap-4 text-xl text-slate-500 items-center">
-            <div class="text-left">© 2026 All right reserved </div>
-            <div class="text-center"> Lydex de Rabat</div>
-            <div class="text-right">&lt;/&gt; developed by <strong><em>Ahmed BOURAMDANE</em></strong></div>
-        </div>
-    </footer>
-</body>
+        <footer
+            class="mt-4 bg-slate-900 border-t border-slate-400 py-4 fixed bottom-0 w-full z-40 h-14"
+        >
+            <div
+                class="container mx-auto px-10 grid grid-cols-3 gap-4 text-l text-slate-300 items-center"
+            >
+                <div class="text-left">© 2026 All right reserved</div>
+                <div class="text-center">Lydex de Rabat</div>
+                <div class="text-right">
+                    &lt;/&gt; developed by
+                    <strong><em>Ahmed BOURAMDANE</em></strong>
+                </div>
+            </div>
+        </footer>
+    </body>
 </html>

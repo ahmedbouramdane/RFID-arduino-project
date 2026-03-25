@@ -3,7 +3,7 @@ import json
 import threading
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
@@ -43,6 +43,34 @@ def ensure_excel_file():
         df.to_excel(EXCEL_FILE, index=False)
 
 init_db()
+
+def format_duration(seconds):
+    """
+    Convert seconds to a human-readable string like:
+    "2 months, 5 days, 3 hours, 15 minutes, 30 seconds"
+    Omitted if zero.
+    """
+    if seconds < 0:
+        return "0 seconds"
+    if seconds == 0:
+        return "0 seconds"
+
+    # Define units in seconds
+    units = [
+        ('month', 30 * 24 * 3600),
+        ('day', 24 * 3600),
+        ('hour', 3600),
+        ('minute', 60),
+        ('second', 1)
+    ]
+
+    parts = []
+    for name, unit in units:
+        if seconds >= unit:
+            count = int(seconds // unit)
+            seconds %= unit
+            parts.append(f"{count} {name}{'s' if count > 1 else ''}")
+    return ", ".join(parts)
 
 def process_scan(uid):
     """Handle an RFID scan."""
@@ -105,20 +133,35 @@ def log_exit(uid, row_index):
         time_now = now.strftime('%H:%M:%S')
         date_today = now.strftime('%Y-%m-%d')
 
-        start_t = datetime.strptime(str(df.at[row_index, 'Entry Time']), '%H:%M:%S')
-        duration = round((now - now.replace(hour=start_t.hour, minute=start_t.minute, second=start_t.second)).total_seconds() / 60, 2)
+        # Get entry date and time from the row
+        entry_date = str(df.at[row_index, 'Date'])
+        entry_time = str(df.at[row_index, 'Entry Time'])
+        entry_datetime_str = f"{entry_date} {entry_time}"
+        entry_datetime = datetime.strptime(entry_datetime_str, '%Y-%m-%d %H:%M:%S')
 
+        # Exit datetime is now (the current datetime)
+        exit_datetime = now
+
+        # Compute total seconds
+        delta = exit_datetime - entry_datetime
+        total_seconds = delta.total_seconds()
+        duration_minutes = total_seconds / 60.0
+
+        # Update the row
         df.at[row_index, 'Exit Time'] = time_now
-        df.at[row_index, 'Duration (Min)'] = duration
+        df.at[row_index, 'Duration (Min)'] = round(duration_minutes, 2)
         df.to_excel(EXCEL_FILE, index=False)
 
         users = json.load(open(JSON_FILE))
+        # Format duration for display (human-readable)
+        formatted_duration = format_duration(total_seconds)
+
         socketio.emit('access_granted', {
             'user': users[uid],
             'type': 'EXIT',
             'time': time_now,
             'date': date_today,
-            'duration': duration
+            'duration': formatted_duration
         })
 
 @app.route('/')
@@ -128,12 +171,11 @@ def home():
         df = pd.read_excel(EXCEL_FILE)
         today = datetime.now().strftime('%Y-%m-%d')
         date_str = request.args.get('date', None)
-        df_today = ""
         if date_str:
-            df_today = df[df['Date'] == date_str].copy() 
+            df_today = df[df['Date'] == date_str].copy()
         else:
-            df_today = df[df['Date'] == today].copy() 
-        
+            df_today = df[df['Date'] == today].copy()
+
     with open(JSON_FILE, 'r') as f:
         users = json.load(f)
 
@@ -147,8 +189,32 @@ def home():
 
         entry_time = row['Entry Time']
         exit_time = row['Exit Time'] if pd.notna(row['Exit Time']) else None
-        duration = row['Duration (Min)'] if pd.notna(row['Duration (Min)']) else 0
         status = 'Inside' if exit_time is None else 'Exited'
+
+        # Compute duration from entry and exit timestamps
+        if exit_time is not None:
+            # Build entry datetime
+            entry_date = str(row['Date'])
+            entry_time_str = str(entry_time)
+            entry_datetime = datetime.strptime(f"{entry_date} {entry_time_str}", '%Y-%m-%d %H:%M:%S')
+            # Build exit datetime (may be on a later day)
+            # The exit date is not stored; we need to infer.
+            # Since exit_time is recorded on the day of exit, but the row's Date is entry date.
+            # If exit_time is less than entry_time, it's likely the next day.
+            exit_time_str = str(exit_time)
+            exit_candidate = datetime.strptime(f"{entry_date} {exit_time_str}", '%Y-%m-%d %H:%M:%S')
+            if exit_candidate <= entry_datetime:
+                # Assume it's the next day (or later)
+                # We'll add days until it's after entry_datetime
+                # In practice, one day is enough, but loop for safety
+                while exit_candidate <= entry_datetime:
+                    exit_candidate += timedelta(days=1)
+            exit_datetime = exit_candidate
+            delta = exit_datetime - entry_datetime
+            total_seconds = delta.total_seconds()
+            duration_str = format_duration(total_seconds)
+        else:
+            duration_str = "0 seconds"
 
         records.append({
             'uid': uid,
@@ -157,7 +223,7 @@ def home():
             'image': image,
             'entry_time': entry_time,
             'exit_time': exit_time,
-            'duration': duration,
+            'duration': duration_str,
             'status': status
         })
 
