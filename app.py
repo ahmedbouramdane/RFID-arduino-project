@@ -1,4 +1,5 @@
 import serial
+import serial.tools.list_ports
 import json
 import threading
 import os
@@ -25,7 +26,6 @@ def init_db():
             json.dump({}, f)
 
 def ensure_excel_file():
-    """Create or repair the Excel file if needed."""
     if not os.path.exists(EXCEL_FILE):
         df = pd.DataFrame(columns=REQUIRED_COLUMNS)
         df.to_excel(EXCEL_FILE, index=False)
@@ -45,17 +45,8 @@ def ensure_excel_file():
 init_db()
 
 def format_duration(seconds):
-    """
-    Convert seconds to a human-readable string like:
-    "2 months, 5 days, 3 hours, 15 minutes, 30 seconds"
-    Omitted if zero.
-    """
-    if seconds < 0:
+    if seconds < 0 or seconds == 0:
         return "0 seconds"
-    if seconds == 0:
-        return "0 seconds"
-
-    # Define units in seconds
     units = [
         ('month', 30 * 24 * 3600),
         ('day', 24 * 3600),
@@ -63,7 +54,6 @@ def format_duration(seconds):
         ('minute', 60),
         ('second', 1)
     ]
-
     parts = []
     for name, unit in units:
         if seconds >= unit:
@@ -73,27 +63,20 @@ def format_duration(seconds):
     return ", ".join(parts)
 
 def process_scan(uid):
-    """Handle an RFID scan."""
     with open(JSON_FILE, 'r') as f:
         users = json.load(f)
-
     if uid not in users:
         print(f"⚠️ Unknown Card: {uid}")
         socketio.emit('access_denied', {'uid': uid})
         return
-
     user = users[uid]
-
     with file_lock:
         ensure_excel_file()
         df = pd.read_excel(EXCEL_FILE)
         active_session = df[(df['UID'] == uid) & (df['Exit Time'].isna())]
-
     if active_session.empty:
-        # No active session → auto entry
         log_entry(uid, user)
     else:
-        # Active session → exit
         log_exit(uid, active_session.index[-1])
 
 def log_entry(uid, user):
@@ -103,26 +86,16 @@ def log_entry(uid, user):
         now = datetime.now()
         date_today = now.strftime('%Y-%m-%d')
         time_now = now.strftime('%H:%M:%S')
-
         new_row = {
-            'UID': uid,
-            'Full Name': user['name'],
-            'Role': user['role'],
-            'Date': date_today,
-            'Entry Time': time_now,
-            'Exit Time': None,
-            'Duration (Min)': 0,
-            'Status': 'Auto Entry'
+            'UID': uid, 'Full Name': user['name'], 'Role': user['role'],
+            'Date': date_today, 'Entry Time': time_now, 'Exit Time': None,
+            'Duration (Min)': 0, 'Status': 'Auto Entry'
         }
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         df.to_excel(EXCEL_FILE, index=False)
-
     socketio.emit('access_granted', {
-        'user': user,
-        'type': 'ENTRY',
-        'time': time_now,
-        'date': date_today,
-        'duration': 0
+        'user': user, 'type': 'ENTRY', 'time': time_now,
+        'date': date_today, 'duration': 0
     })
 
 def log_exit(uid, row_index):
@@ -132,36 +105,20 @@ def log_exit(uid, row_index):
         now = datetime.now()
         time_now = now.strftime('%H:%M:%S')
         date_today = now.strftime('%Y-%m-%d')
-
-        # Get entry date and time from the row
         entry_date = str(df.at[row_index, 'Date'])
         entry_time = str(df.at[row_index, 'Entry Time'])
-        entry_datetime_str = f"{entry_date} {entry_time}"
-        entry_datetime = datetime.strptime(entry_datetime_str, '%Y-%m-%d %H:%M:%S')
-
-        # Exit datetime is now (the current datetime)
-        exit_datetime = now
-
-        # Compute total seconds
-        delta = exit_datetime - entry_datetime
+        entry_datetime = datetime.strptime(f"{entry_date} {entry_time}", '%Y-%m-%d %H:%M:%S')
+        delta = now - entry_datetime
         total_seconds = delta.total_seconds()
         duration_minutes = total_seconds / 60.0
-
-        # Update the row
         df.at[row_index, 'Exit Time'] = time_now
         df.at[row_index, 'Duration (Min)'] = round(duration_minutes, 2)
         df.to_excel(EXCEL_FILE, index=False)
-
         users = json.load(open(JSON_FILE))
-        # Format duration for display (human-readable)
         formatted_duration = format_duration(total_seconds)
-
         socketio.emit('access_granted', {
-            'user': users[uid],
-            'type': 'EXIT',
-            'time': time_now,
-            'date': date_today,
-            'duration': formatted_duration
+            'user': users[uid], 'type': 'EXIT', 'time': time_now,
+            'date': date_today, 'duration': formatted_duration
         })
 
 @app.route('/')
@@ -170,73 +127,46 @@ def home():
         ensure_excel_file()
         df = pd.read_excel(EXCEL_FILE)
         today = datetime.now().strftime('%Y-%m-%d')
-        date_str = request.args.get('date', None)
-        if date_str:
-            df_today = df[df['Date'] == date_str].copy()
-        else:
-            df_today = df[df['Date'] == today].copy()
-
+        date_str = request.args.get('date', today)   # use param or today
+        df_selected = df[df['Date'] == date_str].copy()
     with open(JSON_FILE, 'r') as f:
         users = json.load(f)
-
     records = []
-    for _, row in df_today.iterrows():
+    for _, row in df_selected.iterrows():
         uid = row['UID']
         user = users.get(uid, {})
         name = user.get('name', row.get('Full Name', 'Unknown'))
         role = user.get('role', row.get('Role', ''))
         image = user.get('image', '/static/default-avatar.png')
-
         entry_time = row['Entry Time']
         exit_time = row['Exit Time'] if pd.notna(row['Exit Time']) else None
         status = 'Inside' if exit_time is None else 'Exited'
-
-        # Compute duration from entry and exit timestamps
         if exit_time is not None:
-            # Build entry datetime
             entry_date = str(row['Date'])
-            entry_time_str = str(entry_time)
-            entry_datetime = datetime.strptime(f"{entry_date} {entry_time_str}", '%Y-%m-%d %H:%M:%S')
-            # Build exit datetime (may be on a later day)
-            # The exit date is not stored; we need to infer.
-            # Since exit_time is recorded on the day of exit, but the row's Date is entry date.
-            # If exit_time is less than entry_time, it's likely the next day.
-            exit_time_str = str(exit_time)
-            exit_candidate = datetime.strptime(f"{entry_date} {exit_time_str}", '%Y-%m-%d %H:%M:%S')
-            if exit_candidate <= entry_datetime:
-                # Assume it's the next day (or later)
-                # We'll add days until it's after entry_datetime
-                # In practice, one day is enough, but loop for safety
-                while exit_candidate <= entry_datetime:
+            entry_dt = datetime.strptime(f"{entry_date} {entry_time}", '%Y-%m-%d %H:%M:%S')
+            exit_candidate = datetime.strptime(f"{entry_date} {exit_time}", '%Y-%m-%d %H:%M:%S')
+            if exit_candidate <= entry_dt:
+                while exit_candidate <= entry_dt:
                     exit_candidate += timedelta(days=1)
-            exit_datetime = exit_candidate
-            delta = exit_datetime - entry_datetime
-            total_seconds = delta.total_seconds()
+            exit_dt = exit_candidate
+            total_seconds = (exit_dt - entry_dt).total_seconds()
             duration_str = format_duration(total_seconds)
         else:
             duration_str = "0 seconds"
-
         records.append({
-            'uid': uid,
-            'name': name,
-            'role': role,
-            'image': image,
-            'entry_time': entry_time,
-            'exit_time': exit_time,
-            'duration': duration_str,
-            'status': status
+            'uid': uid, 'name': name, 'role': role, 'image': image,
+            'entry_time': entry_time, 'exit_time': exit_time,
+            'duration': duration_str, 'status': status
         })
-
     total_users = len(users)
-    total_today = len(df_today)
+    total_selected = len(df_selected)
     active_now = len([r for r in records if r['status'] == 'Inside'])
-
     return render_template('index.html',
                            total_users=total_users,
-                           total_today=total_today,
+                           total_today=total_selected,
                            active_now=active_now,
                            records=records,
-                           today=today)
+                           selected_date=date_str)
 
 @app.route('/scan')
 def scan_page():
@@ -253,29 +183,46 @@ def add_user():
     name = request.form.get('name')
     role = request.form.get('role')
     image_b64 = request.form.get('image_b64')
-
-    # Generate default avatar if none provided
     if not image_b64:
         import hashlib
         hash_obj = hashlib.md5(name.encode())
         color = int(hash_obj.hexdigest()[:6], 16) & 0xffffff
         image_b64 = f"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23{color:06x}'/%3E%3Ctext x='50' y='50' font-size='40' text-anchor='middle' dy='.3em' fill='white' font-family='Arial'%3E{name[0].upper()}%3C/text%3E%3C/svg%3E"
-
     with file_lock:
         with open(JSON_FILE, 'r') as f:
             users = json.load(f)
         users[uid] = {'name': name, 'role': role, 'image': image_b64}
         with open(JSON_FILE, 'w') as f:
             json.dump(users, f, indent=2)
-
     return jsonify({'success': True})
 
-# --- Robust serial thread ---
-def serial_thread():
+def select_serial_port():
+    """List available COM ports and let the user choose one."""
+    ports = list(serial.tools.list_ports.comports())
+    if not ports:
+        print("❌ No serial ports found. Using default 'COM11'.")
+        return 'COM11'
+    print("\n🔌 Available serial ports:")
+    for i, port in enumerate(ports):
+        print(f"  {i+1}. {port.device} - {port.description}")
     while True:
         try:
-            ser = serial.Serial('COM11', 9600, timeout=0.1)
-            print("🔌 Connected to Scanner on COM11")
+            choice = input(f"Select port (1-{len(ports)}), or press Enter for default 'COM11': ")
+            if choice == "":
+                return 'COM11'
+            idx = int(choice) - 1
+            if 0 <= idx < len(ports):
+                return ports[idx].device
+            else:
+                print("Invalid choice. Try again.")
+        except ValueError:
+            print("Please enter a number.")
+
+def serial_thread(port):
+    while True:
+        try:
+            ser = serial.Serial(port, 9600, timeout=0.1)
+            print(f"🔌 Connected to Scanner on {port}")
             while True:
                 try:
                     if ser.in_waiting > 0:
@@ -283,15 +230,17 @@ def serial_thread():
                         if len(uid) > 4:
                             print(f"📡 Tag Detected: {uid}")
                             process_scan(uid)
-                            time.sleep(2)  # debounce
+                            time.sleep(2)
                     time.sleep(0.1)
                 except Exception as e:
                     print(f"⚠️ Error during scan processing: {e}")
                     time.sleep(1)
         except Exception as e:
-            print(f"❌ Serial connection failed: {e}. Retrying in 5 seconds...")
+            print(f"❌ Serial connection failed on {port}: {e}. Retrying in 5 seconds...")
             time.sleep(5)
 
 if __name__ == '__main__':
-    threading.Thread(target=serial_thread, daemon=True).start()
+    # Interactive port selection
+    selected_port = select_serial_port()
+    threading.Thread(target=serial_thread, args=(selected_port,), daemon=True).start()
     socketio.run(app, debug=True, port=5000, use_reloader=False)

@@ -1,10 +1,17 @@
 {% extends 'layout.html' %}
 {% block content %}
 <div class="mt-4">
-    <h1 class="text-4xl font-black text-white mb-2">ATTENDANCE DASHBOARD</h1>
-    <p class="text-slate-400 text-sm uppercase tracking-widest mb-8">Real‑time overview · {{ today }}</p>
+    <div class="flex flex-wrap justify-between items-center mb-6">
+        <h1 class="text-4xl font-black text-white">ATTENDANCE DASHBOARD</h1>
+        <!-- Calendar date picker -->
+        <div class="flex items-center gap-3">
+            <label class="text-sm text-slate-400 uppercase tracking-wider">Select date:</label>
+            <input type="text" id="datePicker" class="input input-sm input-bordered bg-slate-800 text-white border-slate-700 w-44" value="{{ selected_date }}">
+        </div>
+    </div>
+    <p class="text-slate-400 text-sm uppercase tracking-widest mb-8">Showing records for <span class="text-primary font-bold">{{ selected_date }}</span></p>
 
-    <!-- Stats Cards -->
+    <!-- Stats Cards (same as before) -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         <div class="stat-card bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
             <div class="stat-title text-xs text-slate-500 uppercase tracking-wider">Registered Users</div>
@@ -12,31 +19,31 @@
             <div class="stat-desc text-slate-600 text-xs mt-2">Total identities in database</div>
         </div>
         <div class="stat-card bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-            <div class="stat-title text-xs text-slate-500 uppercase tracking-wider">Today's Scans</div>
+            <div class="stat-title text-xs text-slate-500 uppercase tracking-wider">Scans on this day</div>
             <div class="stat-value text-4xl font-black text-emerald-400 mt-2">{{ total_today }}</div>
             <div class="stat-desc text-slate-600 text-xs mt-2">Entries + Exits</div>
         </div>
         <div class="stat-card bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
             <div class="stat-title text-xs text-slate-500 uppercase tracking-wider">Currently Inside</div>
             <div class="stat-value text-4xl font-black text-amber-400 mt-2">{{ active_now }}</div>
-            <div class="stat-desc text-slate-600 text-xs mt-2">Active sessions</div>
+            <div class="stat-desc text-slate-600 text-xs mt-2">Active sessions on this day</div>
         </div>
     </div>
 
-    <!-- Tabs & Table -->
+    <!-- Tabs & Table (same as before) -->
     <div class="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-sm">
         <div class="flex items-center justify-between mb-6">
             <h2 class="text-xl font-bold text-white flex items-center gap-2">
                 <span class="w-2 h-2 bg-primary rounded-full animate-pulse"></span>
-                TODAY'S ATTENDANCE
+                ATTENDANCE FOR {{ selected_date }}
             </h2>
             <div class="flex gap-2">
-                <button id="tabAll" class="tab-btn active px-4 py-2 text-xs font-bold rounded-lg bg-primary text-slate-900 uppercase tracking-wider">All Today</button>
+                <button id="tabAll" class="tab-btn active px-4 py-2 text-xs font-bold rounded-lg bg-primary text-slate-900 uppercase tracking-wider">All</button>
                 <button id="tabInside" class="tab-btn px-4 py-2 text-xs font-bold rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 uppercase tracking-wider">Currently Inside</button>
             </div>
         </div>
 
-        <!-- Table -->
+        <!-- Table (unchanged) -->
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
                 <thead>
@@ -64,7 +71,7 @@
                         </td>
                         <td class="py-3 px-2 font-mono">
                             {% if rec.exit_time %}
-                                {{ rec.duration }} 
+                                {{ rec.duration }}
                             {% else %}
                                 <span class="text-slate-600">—</span>
                             {% endif %}
@@ -79,7 +86,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7" class="py-8 text-center text-slate-500">No scans recorded today.</td>
+                        <td colspan="7" class="py-8 text-center text-slate-500">No scans recorded on this date.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -87,7 +94,7 @@
         </div>
     </div>
 
-    <!-- Quick Action Cards -->
+    <!-- Quick Action Cards (unchanged) -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-10">
         <a href="/scan" class="group bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-8 hover:border-primary/50 transition-all duration-300">
             <div class="flex items-center gap-4">
@@ -120,6 +127,17 @@
 </div>
 
 <script>
+    // Initialize flatpickr
+    flatpickr("#datePicker", {
+        dateFormat: "Y-m-d",
+        defaultDate: "{{ selected_date }}",
+        onChange: function(selectedDates, dateStr, instance) {
+            if (dateStr) {
+                window.location.href = "/?date=" + dateStr;
+            }
+        }
+    });
+
     // Tab filtering
     const tabAll = document.getElementById('tabAll');
     const tabInside = document.getElementById('tabInside');
@@ -129,7 +147,6 @@
         rows.forEach(row => {
             row.style.display = (status === 'all' || row.dataset.status === status) ? '' : 'none';
         });
-        // Update active classes
         tabAll.className = status === 'all' 
             ? 'tab-btn active px-4 py-2 text-xs font-bold rounded-lg bg-primary text-slate-900 uppercase tracking-wider'
             : 'tab-btn px-4 py-2 text-xs font-bold rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 uppercase tracking-wider';
